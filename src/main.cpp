@@ -278,6 +278,11 @@ double cost_to_stop(double breaks_cost)
 	return cost;
 }
 
+double ms_to_mph(double ms)
+{
+  return ms * (3600.0/1600.0);
+}
+
 
 int main() {
   uWS::Hub h;
