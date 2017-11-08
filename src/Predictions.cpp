@@ -1,3 +1,6 @@
+//
+// Created by Oleg Leyzerov on 19/08/2017.
+//
 #include "spline.h"
 #include "Predictions.h"
 #include "Track.h"
@@ -17,15 +20,16 @@ double Predictions::GetEpsi (Track track, double vx, double vy, double s, double
 void Predictions::update (Track track, vector<vector<double>>sensor_fusion){
   current_sf = sensor_fusion;
   for (auto i=0; i<sensor_fusion.size();i++){
-    if (sensor_fusion[i][6]>=0) { 
+    if (sensor_fusion[i][6]>=0) { // don't consider vehicles with d < 0
       int veh_id = (int) sensor_fusion[i][0];
-      if (!vehicles.count(veh_id)) { 
+      if (!vehicles.count(veh_id)) { // if car_id is not tracked before
+        Vehicle veh;
         vehicles[veh_id] = veh;
       }
       for (auto j = 0; j < 6; j++) {
-        vehicles[veh_id].vehStates[j].push_back(sensor_fusion[i][j + 1]);
+        vehicles[veh_id].vehStates[j].push_back(sensor_fusion[i][j + 1]);//x, y, vx, vy, s, d
 
-        if (vehicles[veh_id].vehStates[j].size() > 2) 
+        if (vehicles[veh_id].vehStates[j].size() > 2) // save just 2 SF states
           vehicles[veh_id].vehStates[j].erase(vehicles[veh_id].vehStates[j].begin());
       }
       double vx0, vy0, s0, d0, v0, epsi0;
@@ -41,7 +45,7 @@ void Predictions::update (Track track, vector<vector<double>>sensor_fusion){
       vehicles[veh_id].as = 0;
       vehicles[veh_id].ad = 0;
 
-      if (vehicles[veh_id].vehStates[0].size() == 2) {
+      if (vehicles[veh_id].vehStates[0].size() == 2) { // calculate a and v
 
         double vx1, vy1, s1, d1, v1, epsi1;
         vx1 = vehicles[veh_id].vehStates[2][1];

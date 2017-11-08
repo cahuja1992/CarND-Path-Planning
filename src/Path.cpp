@@ -1,7 +1,3 @@
-//
-// Created by Oleg Leyzerov on 19/08/2017.
-//
-
 #include <cmath>
 #include <vector>
 #include <string>
@@ -10,44 +6,24 @@
 
 using namespace std;
 
-
 Path::Path(vector<double> map_waypoints_x,
            vector<double> map_waypoints_y,
            vector<double> map_waypoints_s,
            vector<double> map_waypoints_dx,
            vector<double> map_waypoints_dy){
 
-  behav_plan.Init(map_waypoints_x,
-                  map_waypoints_y,
-                  map_waypoints_s,
-                  map_waypoints_dx,
-                  map_waypoints_dy);
+  behav_plan.Init(map_waypoints_x,map_waypoints_y,map_waypoints_s,map_waypoints_dx,map_waypoints_dy);
 }
 
-
-
-vector<vector<double>> Path::Process(double car_s,
-                                     double car_d,
-                                     vector<vector<double>> sensor_fusion,
-                                     vector<double> previous_path_x,
-                                     vector<double> previous_path_y) {
-
-
-
-  behav_plan.predictions.update(behav_plan.track, sensor_fusion); // update info about vehicles around
-  vector<vector<double>> next_path_XY_points = behav_plan.GetBestTrajectory(car_s,
-                                                                    car_d,
-                                                                    sensor_fusion,
-                                                                    previous_path_x,
-                                                                    previous_path_y);
+vector<vector<double>> Path::Process(double car_s,double car_d,vector<vector<double>> sensor_fusion,vector<double> previous_path_x,vector<double> previous_path_y) 
+{
+  behav_plan.predictions.update(behav_plan.track, sensor_fusion); 
+  vector<vector<double>> next_path_XY_points = behav_plan.GetBestTrajectory(car_s,car_d,sensor_fusion,previous_path_x,previous_path_y);
 
   return next_path_XY_points;
 
 
 }
-//
-// Behavior Planing Class functions
-//
 
 void BehavPlan::Init(vector<double> map_waypoints_x,
                      vector<double> map_waypoints_y,
@@ -64,7 +40,7 @@ void BehavPlan::Init(vector<double> map_waypoints_x,
 
 vector<vector<double>> BehavPlan::CarsAhead(double car_s, int lane, double behind, double length, bool collision){
   vector<vector<double>> cars_ahead;
-  double buffer = 20; // distance to the car ahead in collision avoidance case
+  double buffer = 20; 
   for (auto i = 0; i < predictions.current_sf.size(); i++){
     double d_lane_center = lane * 4 + 2;
     double d_veh = predictions.current_sf[i][6];
@@ -75,21 +51,21 @@ vector<vector<double>> BehavPlan::CarsAhead(double car_s, int lane, double behin
     bool cars_right = ((d_lane_center-d_veh)<=-2.0 && (d_lane_center-d_veh)>-2.4 && (veh_ad < -0.5));
     bool collision_adjuscent = collision && (cars_left || cars_right);
 
-    if (fabs(d_lane_center-d_veh)<2) { //vehicle in lane ahead
+    if (fabs(d_lane_center-d_veh)<2) { 
       double distance = predictions.current_sf[i][5] - (car_s+behind);
       if (distance < 0) distance = 6945.554 + distance;
-      if (distance < length){ //veh ahead
-        cars_ahead.push_back({predictions.current_sf[i][0], distance}); // veh_id, distance
+      if (distance < length){ 
+        cars_ahead.push_back({predictions.current_sf[i][0], distance}); 
       }
-    } else if (collision_adjuscent) { //vehicles in adjacent lanes attempting to change lane in a short distance
+    } else if (collision_adjuscent) { 
       double distance = predictions.current_sf[i][5] - (car_s+behind);
       if (distance < 0) distance = 6945.554 + distance;
-      if (distance < buffer) { //veh ahead
-        cars_ahead.push_back({predictions.current_sf[i][0], distance}); // veh_id, distance
+      if (distance < buffer) { 
+        cars_ahead.push_back({predictions.current_sf[i][0], distance}); 
       }
     }
   }
-  // sorting vehicles by distance ahead
+
   std::sort(cars_ahead.begin(), cars_ahead.end(),
             [](const std::vector<double>& a, const std::vector<double>& b) {
                 return a[1] < b[1];
@@ -107,33 +83,31 @@ vector<vector<double>> BehavPlan::GetBestTrajectory(double car_s,
                                                     vector<double> previous_path_x,
                                                     vector<double> previous_path_y){
 
-  static vector<vector<double>>path_backup = {{},{},{},{},{}};//saving s,v,d,d_time,shift in case of emergency breaking
-  static double v_max = 22.12848; // speed limit for current time step
-  int path_length = 100; // number of planned path points
-  int path_emerg = 10; // number of planned path points in case of emergency breaking
+  static vector<vector<double>>path_backup = {{},{},{},{},{}};
+  static double v_max = 22.12848; 
+  int path_length = 100; 
+  int path_emerg = 10; 
 
-  static bool shift = false; // changin lane flag
-  static tk::spline d_t; // spline for lane shift
+  static bool shift = false; 
+  static tk::spline d_t; 
 
-  vector<double> next_x_vals; // next path x points
-  vector<double> next_y_vals; // next path y points
+  vector<double> next_x_vals; 
+  vector<double> next_y_vals; 
 
-  int prev_size; // length of the previous path
-  double buffer = 20; // distance to the car ahead
-  static double s0 = car_s; //s of the last planned path point
+  int prev_size; 
+  double buffer = 20; 
+  static double s0 = car_s; 
   double s1 = s0;
-  static double v0 = 0; //v of last planned path point
+  static double v0 = 0; 
   double v = v0;
-  double a; // a_s
-  const double t = 0.02; // time step for path points
-  static double d_time = 0.02; // for d spline during shift
-  static double d_next = car_d; // d of the last planned path point
-  static double d_shift = d_next; // d for target lane during shift
-  int current_lane = (int)(d_next / 4); // lane of the last planned path point
-  static int target_lane = current_lane; // target lane during shift
-  double veh_id = -1; // id of vehicle ahead, -1 if no veh ahead
-
-  // cars_ahead - car's ahead in lane incl. unexpected shift from adjacent lanes
+  double a;
+  const double t = 0.02; 
+  static double d_time = 0.02; 
+  static double d_next = car_d; 
+  static double d_shift = d_next; 
+  int current_lane = (int)(d_next / 4); 
+  static int target_lane = current_lane; 
+  double veh_id = -1; 
   auto cars_ahead = CarsAhead(car_s, current_lane, 0, 40, true);
 
   prev_size = previous_path_x.size();
@@ -145,8 +119,8 @@ vector<vector<double>> BehavPlan::GetBestTrajectory(double car_s,
     v_max = min(v_veh0 + a_veh0, 22.12848);
     veh_id = cars_ahead[0][0];
 
-    if (distance < buffer ) { //emergency breaking
-      int diff = path_length - prev_size; // path_points used
+    if (distance < buffer ) { 
+      int diff = path_length - prev_size; 
 
       prev_size = min(path_emerg, prev_size);
       if (prev_size == path_emerg ){
@@ -161,7 +135,7 @@ vector<vector<double>> BehavPlan::GetBestTrajectory(double car_s,
         }
       }
     }
-    // consider shift
+
     if(!shift){
       vector<int> next_lanes;
       if (current_lane == 0) next_lanes={1};
